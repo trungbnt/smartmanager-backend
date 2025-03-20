@@ -3,34 +3,11 @@ const router = express.Router();
 const quoteController = require('../controllers/quoteController');
 const auth = require('../middleware/auth');
 const multer = require('multer');
-const path = require('path');
-const Quote = require('../models/Quote'); // Assuming you have a Quote model
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const Quote = require('../models/Quote');
 
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configure multer storage
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        // Get the file name without extension
-        const fileName = path.parse(file.originalname).name;
-        // Get the file extension
-        const fileExt = path.extname(file.originalname);
-        // Create unique suffix
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        // Combine original filename with unique suffix
-        cb(null, `${fileName}-${uniqueSuffix}${fileExt}`);
-    }
-});
-
-// Configure multer upload
+// Configure multer with memory storage
+const storage = multer.memoryStorage();
 const upload = multer({
     storage: storage,
     limits: {
@@ -91,7 +68,16 @@ router.post('/quotes', auth(['admin', 'sales']), upload.single('file'), async (r
 
         // Add file URL if file was uploaded
         if (req.file) {
-            quoteData.fileUrl = `/uploads/${req.file.filename}`;
+            const result = await new Promise((resolve, reject) => {
+                cloudinary.uploader.upload_stream(
+                    { resource_type: 'auto' },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    }
+                ).end(req.file.buffer);
+            });
+            quoteData.fileUrl = result.secure_url; // Lưu URL từ Cloudinary
         }
 
         // Create and save quote
@@ -136,14 +122,8 @@ router.delete('/quotes/:id', async (req, res) => {
             return res.status(404).json({ message: 'Quote not found' });
         }
 
-        // Delete associated file if exists
-        if (quote.fileUrl) {
-            const filePath = path.join(__dirname, '..', quote.fileUrl);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        }
-
+        // Nếu dùng Cloudinary, không cần xóa file từ hệ thống file
+        // Chỉ cần xóa bản ghi trong database
         await quote.deleteOne();
         res.json({ message: 'Quote deleted successfully' });
     } catch (error) {
