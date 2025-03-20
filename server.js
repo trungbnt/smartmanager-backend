@@ -65,7 +65,8 @@ app.use(express.urlencoded({ extended: true }));
 // Cấu hình CORS linh hoạt
 const allowedOrigins = [
     'http://localhost:3000',
-    'https://smartmanager-sigma.vercel.app'
+    'https://smartmanager-sigma.vercel.app',
+    'https://smartmanagerbackend.vercel.app'
 ].filter(Boolean); // Lọc bỏ các giá trị undefined
 
 app.use(cors({
@@ -79,8 +80,13 @@ app.use(cors({
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    credentials: true,
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    maxAge: 86400 // 1 day
 }));
+
+// Add OPTIONS handling for preflight requests
+app.options('*', cors());
 
 // Middleware debug request
 app.use((req, res, next) => {
